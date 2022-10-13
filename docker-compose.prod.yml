@@ -1,0 +1,80 @@
+version: '3.8'
+
+x-django: &django
+  build:
+    context: .
+    dockerfile: ./docker/django/Dockerfile
+  restart: always
+  image: "${COMPOSE_IMAGES_PREFIX}_prod"
+  depends_on:
+    - postgres
+    - redis
+  volumes:
+    - ./backend:/opt/project/src:cached
+    - ./data/prod:/data:z
+  env_file:
+    - ./backend/.env
+
+services:
+  django:
+    <<: *django
+    command: prod
+  celeryworker:
+    <<: *django
+    command: celery worker -l INFO
+  celerybeat:
+    <<: *django
+    command: celery beat -l INFO
+  flower:
+    image: mher/flower:0.9.7
+    command: "flower --broker=${REDIS_URL} --port=5555 --url-prefix=flower --basic_auth=${CELERY_FLOWER_USER}:${CELERY_FLOWER_PASSWORD}"
+    depends_on:
+      - redis
+    env_file:
+      - ./backend/.env
+  postgres:
+    build:
+      context: .
+      dockerfile: ./docker/postgres/Dockerfile
+    image: "${COMPOSE_IMAGES_PREFIX}_prod_postgres"
+    restart: always
+    volumes:
+      - prod_postgres:/var/lib/postgresql/data:Z
+      - ./data/prod_backups:/backups:z
+    env_file:
+      - ./backend/.env
+  redis:
+    image: redis:6.0
+    restart: always
+  react:
+    build:
+      context: .
+      dockerfile: ./docker/react/Dockerfile
+    command: prod
+    image: "${COMPOSE_IMAGES_PREFIX}_prod_react"
+    depends_on:
+      - django
+    env_file:
+      - ./frontend/.env
+  caddy:
+    build:
+      context: .
+      dockerfile: ./docker/caddy/Dockerfile
+    image: "${COMPOSE_IMAGES_PREFIX}_prod_caddy"
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:80:80"
+      - "0.0.0.0:443:443"
+    volumes:
+      - prod_caddy:/data
+    env_file:
+      - ./backend/.env
+    depends_on:
+      - django
+      - react
+      - flower
+
+volumes:
+  prod_postgres:
+  prod_redis:
+  prod_caddy:

@@ -1,0 +1,11 @@
+{$SITE_DOMAIN}:443 {
+	reverse_proxy /flower/* flower:5555
+
+	reverse_proxy /admin/* django:8000
+	reverse_proxy /api/* django:8000
+    reverse_proxy /dj-static/* django:8000
+    reverse_proxy /media/* django:8000
+
+    reverse_proxy /static/* react:3000
+	reverse_proxy /* react:3000
+}

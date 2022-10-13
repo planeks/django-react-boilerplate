@@ -1,0 +1,73 @@
+version: '3.8'
+
+x-django: &django
+  build:
+    context: .
+    dockerfile: ./docker/django/Dockerfile
+  image: "${COMPOSE_IMAGES_PREFIX}_dev"
+  depends_on:
+    - postgres
+    - redis
+  volumes:
+    - ./backend:/opt/project/src:cached
+    - ./data/dev:/data:z
+  env_file:
+    - ./backend/.env
+
+services:
+  django:
+    <<: *django
+    ports:
+      - "8000:8000"
+    command: dev
+  celeryworker:
+    <<: *django
+    command: celery-dev worker -l INFO -B
+  flower:
+    image: mher/flower:0.9.7
+    command: "flower --broker=${REDIS_URL} --port=5555 --url-prefix=flower"
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+    env_file:
+      - ./backend/.env
+  redis:
+    image: redis:6.0
+    volumes:
+      - dev_redis:/data
+  react:
+    build:
+      context: .
+      dockerfile: ./docker/react/Dockerfile
+    image: "${COMPOSE_IMAGES_PREFIX}_dev_react"
+    command: dev
+    volumes:
+      - ./frontend:/opt/project/src:cached
+      - dev_node_modules:/opt/project/src/node_modules
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./frontend/.env
+  postgres:
+    build:
+      context: .
+      dockerfile: ./docker/postgres/Dockerfile
+    image: "${COMPOSE_IMAGES_PREFIX}_dev_postgres"
+    volumes:
+      - dev_postgres:/var/lib/postgresql/data:Z
+      - ./data/dev_backups:/backups:z
+    env_file:
+      - ./backend/.env
+  mailhog:
+    image: mailhog/mailhog
+    logging:
+      driver: 'none'  # disable saving logs
+    ports:
+      - "8025:8025" # web ui
+
+volumes:
+  dev_postgres:
+  dev_redis:
+  dev_node_modules:
+

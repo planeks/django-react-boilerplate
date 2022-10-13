@@ -1,0 +1,46 @@
+#!/bin/bash
+
+set -o errexit
+set -o pipefail
+set -o nounset
+
+PORT="${APP_PORT:-8000}"
+
+django_ready() {
+status_code=$(curl -o /dev/null --silent --head --write-out '%{http_code}' "django:${PORT}")
+if [ $status_code -eq 000 ]; then
+  return -1
+else
+  return 0
+fi
+}
+
+wait_for_django() {
+count=0
+trap exitFunc INT
+echo "Checking the Django connection"
+until django_ready; do
+  count=$((count+1))
+  if [ $count -eq 10 ]; then
+      >&2 echo 'A waiting time has been reached. Exiting...'
+      exit -1
+  fi
+  >&2 echo 'Waiting for Django to become available...'
+  sleep 2
+done
+>&2 echo 'Django is available'
+}
+
+wait_for_django
+
+case "$1" in
+    dev)
+        exec npm start
+    ;;
+    prod)
+        # Use the next line if you want to make production build before the server start
+        # npm run build
+
+        exec serve -s build
+    ;;
+esac
